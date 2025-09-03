@@ -16,10 +16,18 @@ jobs:
       with:
         python-version: '3.11'
     
-    - name: Install dependencies
+    - name: Install system dependencies for OCR
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y tesseract-ocr poppler-utils
+        tesseract --version
+        echo "OCR dependencies installed successfully"
+    
+    - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        echo "Python dependencies installed successfully"
     
     - name: List files in repository
       run: |
