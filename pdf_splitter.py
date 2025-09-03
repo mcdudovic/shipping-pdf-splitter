@@ -6,7 +6,7 @@ import glob
 
 def extract_delivery_number_ocr(pdf_path):
     """
-    Use OCR to extract text and find delivery number in specific locations
+    Use OCR to extract text and find delivery number specifically in DGN format
     """
     try:
         # Try importing OCR libraries
@@ -28,58 +28,66 @@ def extract_delivery_number_ocr(pdf_path):
             print(f"OCR extracted {len(text)} characters from page {page_num + 1}")
             
             if text:
-                # Show first 500 characters for debugging
-                print(f"First 500 chars: {repr(text[:500])}")
+                # Clean up the text for better searching
+                clean_text = ' '.join(text.split())  # Remove extra whitespace
+                print(f"Cleaned text length: {len(clean_text)}")
                 
-                # Method 1: Look for "DANGEROUS GOODS NOTE" pattern
+                # Check if this is the Dangerous Goods Note page
                 if "DANGEROUS GOODS NOTE" in text.upper():
-                    print("Found DANGEROUS GOODS NOTE page")
-                    # Look for "Exporter's reference" followed by the number
-                    patterns = [
-                        r"Exporter['\s]*s?\s+reference[:\s]*(\d+)",
-                        r"Exporters?\s+reference[:\s]*(\d+)",
+                    print("✓ Found DANGEROUS GOODS NOTE page")
+                    
+                    # Method 1: Look for "Exporter's reference" pattern (most specific)
+                    patterns_dgn = [
+                        r"Exporter['\s]*s\s+reference[:\s]*(\d+)",
+                        r"Exporters?\s+reference[:\s]*(\d+)", 
                         r"reference[:\s]*(88\d{8})",
+                        r"reference[^\d]*(88\d{8})",  # reference followed by 88xxxxxxxx
                     ]
                     
-                    for pattern in patterns:
-                        matches = re.findall(pattern, text, re.IGNORECASE)
+                    for pattern in patterns_dgn:
+                        matches = re.findall(pattern, clean_text, re.IGNORECASE)
+                        print(f"Pattern '{pattern}' found: {matches}")
                         for match in matches:
-                            if match.startswith('88') and len(match) == 10:
-                                print(f"Found delivery number via DANGEROUS GOODS pattern: {match}")
-                                return match
-                
-                # Method 2: Look for "PACKING LIST" pattern  
-                if "PACKING LIST" in text.upper():
-                    print("Found PACKING LIST page")
-                    # Look for "Order:" followed by the number
-                    patterns = [
-                        r"Order[:\s]*(88\d{8})",
-                        r"Order[:\s]*(\d+)",
-                    ]
+                            # Clean the match (remove any spaces/characters)
+                            clean_match = re.sub(r'[^\d]', '', match)
+                            if len(clean_match) == 10 and clean_match.startswith('88'):
+                                print(f"✓ Found delivery number via DGN pattern: {clean_match}")
+                                return clean_match
                     
-                    for pattern in patterns:
-                        matches = re.findall(pattern, text, re.IGNORECASE)
-                        for match in matches:
-                            if match.startswith('88') and len(match) == 10:
-                                print(f"Found delivery number via PACKING LIST pattern: {match}")
-                                return match
+                    # Method 2: Look in the top-right area more specifically
+                    # Split text into lines and look for the pattern in first few lines
+                    lines = text.split('\n')[:10]  # First 10 lines (top of document)
+                    top_text = ' '.join(lines)
+                    print(f"Top section text: {repr(top_text[:200])}")
+                    
+                    # Look for any 10-digit number starting with 88 in the top section
+                    top_numbers = re.findall(r'\b88\d{8}\b', top_text)
+                    if top_numbers:
+                        print(f"✓ Found delivery number in top section: {top_numbers[0]}")
+                        return top_numbers[0]
                 
-                # Method 3: Generic search for any 10-digit number starting with 88
-                delivery_numbers = re.findall(r'\b88\d{8}\b', text)
-                if delivery_numbers:
-                    print(f"Found delivery numbers via generic search: {delivery_numbers}")
-                    return delivery_numbers[0]
+                # Generic fallback: Look for any 10-digit number starting with 88
+                all_numbers = re.findall(r'\b88\d{8}\b', text)
+                if all_numbers:
+                    print(f"✓ Found delivery number via generic search: {all_numbers[0]}")
+                    return all_numbers[0]
+                
+                # Show sample of extracted text for debugging if no match found
+                print(f"Sample text (first 300 chars): {repr(text[:300])}")
                 
             else:
                 print(f"No text extracted from page {page_num + 1}")
         
-    except ImportError:
-        print("OCR libraries not available, falling back to PyPDF2...")
+    except ImportError as e:
+        print(f"OCR libraries not available: {e}")
+        print("Falling back to PyPDF2...")
         return extract_delivery_number_fallback(pdf_path)
     except Exception as e:
-        print(f"OCR failed: {e}, falling back to PyPDF2...")
+        print(f"OCR failed with error: {e}")
+        print("Falling back to PyPDF2...")
         return extract_delivery_number_fallback(pdf_path)
     
+    print("No delivery number found with OCR method")
     return None
 
 def extract_delivery_number_fallback(pdf_path):
