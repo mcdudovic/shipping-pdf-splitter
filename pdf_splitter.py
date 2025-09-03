@@ -12,18 +12,52 @@ def extract_delivery_number(pdf_path):
         with open(pdf_path, 'rb') as file:
             pdf_reader = PyPDF2.PdfReader(file)
             
+            print(f"PDF has {len(pdf_reader.pages)} pages")
+            
             # Search through all pages for the delivery number
-            for page in pdf_reader.pages:
-                text = page.extract_text()
+            for page_num, page in enumerate(pdf_reader.pages):
+                print(f"\n--- Processing Page {page_num + 1} ---")
                 
-                # Look for 10-digit number starting with 88
-                delivery_numbers = re.findall(r'\b88\d{8}\b', text)
-                
-                if delivery_numbers:
-                    return delivery_numbers[0]  # Return first match
+                try:
+                    text = page.extract_text()
+                    print(f"Extracted {len(text)} characters from page {page_num + 1}")
+                    
+                    # Show first 500 characters of extracted text for debugging
+                    if text:
+                        print(f"First 500 chars: {repr(text[:500])}")
+                        
+                        # Look for 10-digit number starting with 88
+                        delivery_numbers = re.findall(r'\b88\d{8}\b', text)
+                        
+                        if delivery_numbers:
+                            print(f"Found delivery numbers on page {page_num + 1}: {delivery_numbers}")
+                            return delivery_numbers[0]  # Return first match
+                        
+                        # Also try to find it with spaces or other separators
+                        spaced_numbers = re.findall(r'\b88[\s\-\.]*\d[\s\-\.]*\d[\s\-\.]*\d[\s\-\.]*\d[\s\-\.]*\d[\s\-\.]*\d[\s\-\.]*\d[\s\-\.]*\d\b', text)
+                        if spaced_numbers:
+                            # Remove spaces and separators
+                            clean_number = re.sub(r'[\s\-\.]', '', spaced_numbers[0])
+                            if len(clean_number) == 10 and clean_number.startswith('88'):
+                                print(f"Found spaced delivery number on page {page_num + 1}: {clean_number}")
+                                return clean_number
+                        
+                        # Try looking for the number as separate digits
+                        digit_pattern = re.findall(r'8[\s]*8[\s]*\d[\s]*\d[\s]*\d[\s]*\d[\s]*\d[\s]*\d[\s]*\d[\s]*\d', text)
+                        if digit_pattern:
+                            clean_number = re.sub(r'\s', '', digit_pattern[0])
+                            if len(clean_number) == 10:
+                                print(f"Found digit-separated delivery number on page {page_num + 1}: {clean_number}")
+                                return clean_number
+                                
+                    else:
+                        print(f"No text extracted from page {page_num + 1}")
+                        
+                except Exception as page_error:
+                    print(f"Error processing page {page_num + 1}: {page_error}")
     
     except Exception as e:
-        print(f"Error extracting delivery number: {e}")
+        print(f"Error reading PDF: {e}")
     
     return None
 
@@ -87,6 +121,10 @@ def process_shipping_pdf(pdf_path, base_output_folder="./output"):
     
     if not delivery_number:
         print("ERROR: Could not find delivery number (10-digit starting with 88)")
+        print("This might be because:")
+        print("1. The PDF text is in image format (scanned)")
+        print("2. The number format is different than expected")
+        print("3. The text extraction isn't working properly")
         return False
     
     print(f"Found delivery number: {delivery_number}")
