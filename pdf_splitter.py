@@ -2,6 +2,7 @@ import PyPDF2
 import re
 import os
 from pathlib import Path
+import glob
 
 def extract_delivery_number(pdf_path):
     """
@@ -62,6 +63,13 @@ def split_pdf_to_pages(pdf_path, output_folder):
         print(f"Error splitting PDF: {e}")
         return []
 
+def find_pdf_files():
+    """
+    Find all PDF files in the current directory
+    """
+    pdf_files = glob.glob("*.pdf")
+    return pdf_files
+
 def process_shipping_pdf(pdf_path, base_output_folder="./output"):
     """
     Main function to process the shipping PDF:
@@ -99,13 +107,26 @@ def process_shipping_pdf(pdf_path, base_output_folder="./output"):
         print("ERROR: Failed to split PDF")
         return False
 
-# Example usage
+# Main execution for GitHub Actions
 if __name__ == "__main__":
-    # Replace with your PDF file path
-    pdf_file = "your_shipping_document.pdf"
+    print("=== PDF Splitter Starting ===")
     
-    if os.path.exists(pdf_file):
-        process_shipping_pdf(pdf_file)
-    else:
-        print("Please update the 'pdf_file' variable with the correct path to your PDF")
-        print("Example: pdf_file = 'C:/Documents/shipping_docs.pdf'")
+    # Find all PDF files in the repository
+    pdf_files = find_pdf_files()
+    
+    if not pdf_files:
+        print("ERROR: No PDF files found in the repository")
+        print("Please upload a PDF file to the repository and try again")
+        exit(1)
+    
+    print(f"Found {len(pdf_files)} PDF file(s): {pdf_files}")
+    
+    # Process each PDF file
+    success_count = 0
+    for pdf_file in pdf_files:
+        print(f"\n{'='*50}")
+        if process_shipping_pdf(pdf_file):
+            success_count += 1
+    
+    print(f"\n{'='*50}")
+    print(f"COMPLETED: Successfully processed {success_count}/{len(pdf_files)} PDF files")
