@@ -4,60 +4,128 @@ import os
 from pathlib import Path
 import glob
 
-def extract_delivery_number(pdf_path):
+def extract_delivery_number_ocr(pdf_path):
     """
-    Extract the 10-digit delivery number starting with '88' from the PDF
+    Use OCR to extract text and find delivery number in specific locations
+    """
+    try:
+        # Try importing OCR libraries
+        import pytesseract
+        import pdf2image
+        from PIL import Image
+        
+        print("Using OCR to extract text from scanned PDF...")
+        
+        # Convert PDF pages to images
+        images = pdf2image.convert_from_path(pdf_path)
+        print(f"Converted {len(images)} pages to images")
+        
+        for page_num, image in enumerate(images):
+            print(f"\n--- OCR Processing Page {page_num + 1} ---")
+            
+            # Extract text using OCR
+            text = pytesseract.image_to_string(image)
+            print(f"OCR extracted {len(text)} characters from page {page_num + 1}")
+            
+            if text:
+                # Show first 500 characters for debugging
+                print(f"First 500 chars: {repr(text[:500])}")
+                
+                # Method 1: Look for "DANGEROUS GOODS NOTE" pattern
+                if "DANGEROUS GOODS NOTE" in text.upper():
+                    print("Found DANGEROUS GOODS NOTE page")
+                    # Look for "Exporter's reference" followed by the number
+                    patterns = [
+                        r"Exporter['\s]*s?\s+reference[:\s]*(\d+)",
+                        r"Exporters?\s+reference[:\s]*(\d+)",
+                        r"reference[:\s]*(88\d{8})",
+                    ]
+                    
+                    for pattern in patterns:
+                        matches = re.findall(pattern, text, re.IGNORECASE)
+                        for match in matches:
+                            if match.startswith('88') and len(match) == 10:
+                                print(f"Found delivery number via DANGEROUS GOODS pattern: {match}")
+                                return match
+                
+                # Method 2: Look for "PACKING LIST" pattern  
+                if "PACKING LIST" in text.upper():
+                    print("Found PACKING LIST page")
+                    # Look for "Order:" followed by the number
+                    patterns = [
+                        r"Order[:\s]*(88\d{8})",
+                        r"Order[:\s]*(\d+)",
+                    ]
+                    
+                    for pattern in patterns:
+                        matches = re.findall(pattern, text, re.IGNORECASE)
+                        for match in matches:
+                            if match.startswith('88') and len(match) == 10:
+                                print(f"Found delivery number via PACKING LIST pattern: {match}")
+                                return match
+                
+                # Method 3: Generic search for any 10-digit number starting with 88
+                delivery_numbers = re.findall(r'\b88\d{8}\b', text)
+                if delivery_numbers:
+                    print(f"Found delivery numbers via generic search: {delivery_numbers}")
+                    return delivery_numbers[0]
+                
+            else:
+                print(f"No text extracted from page {page_num + 1}")
+        
+    except ImportError:
+        print("OCR libraries not available, falling back to PyPDF2...")
+        return extract_delivery_number_fallback(pdf_path)
+    except Exception as e:
+        print(f"OCR failed: {e}, falling back to PyPDF2...")
+        return extract_delivery_number_fallback(pdf_path)
+    
+    return None
+
+def extract_delivery_number_fallback(pdf_path):
+    """
+    Fallback method using PyPDF2 (for text-based PDFs)
     """
     try:
         with open(pdf_path, 'rb') as file:
             pdf_reader = PyPDF2.PdfReader(file)
             
-            print(f"PDF has {len(pdf_reader.pages)} pages")
-            
-            # Search through all pages for the delivery number
             for page_num, page in enumerate(pdf_reader.pages):
-                print(f"\n--- Processing Page {page_num + 1} ---")
-                
                 try:
                     text = page.extract_text()
-                    print(f"Extracted {len(text)} characters from page {page_num + 1}")
-                    
-                    # Show first 500 characters of extracted text for debugging
-                    if text:
-                        print(f"First 500 chars: {repr(text[:500])}")
+                    if text and len(text) > 50:  # Only process if we got substantial text
+                        print(f"PyPDF2 extracted {len(text)} characters from page {page_num + 1}")
                         
-                        # Look for 10-digit number starting with 88
+                        # Apply the same targeted search patterns
+                        if "DANGEROUS GOODS NOTE" in text.upper():
+                            patterns = [
+                                r"Exporter['\s]*s?\s+reference[:\s]*(\d+)",
+                                r"reference[:\s]*(88\d{8})",
+                            ]
+                            for pattern in patterns:
+                                matches = re.findall(pattern, text, re.IGNORECASE)
+                                for match in matches:
+                                    if match.startswith('88') and len(match) == 10:
+                                        return match
+                        
+                        if "PACKING LIST" in text.upper():
+                            patterns = [r"Order[:\s]*(88\d{8})"]
+                            for pattern in patterns:
+                                matches = re.findall(pattern, text, re.IGNORECASE)
+                                for match in matches:
+                                    if match.startswith('88') and len(match) == 10:
+                                        return match
+                        
+                        # Generic search
                         delivery_numbers = re.findall(r'\b88\d{8}\b', text)
-                        
                         if delivery_numbers:
-                            print(f"Found delivery numbers on page {page_num + 1}: {delivery_numbers}")
-                            return delivery_numbers[0]  # Return first match
-                        
-                        # Also try to find it with spaces or other separators
-                        spaced_numbers = re.findall(r'\b88[\s\-\.]*\d[\s\-\.]*\d[\s\-\.]*\d[\s\-\.]*\d[\s\-\.]*\d[\s\-\.]*\d[\s\-\.]*\d[\s\-\.]*\d\b', text)
-                        if spaced_numbers:
-                            # Remove spaces and separators
-                            clean_number = re.sub(r'[\s\-\.]', '', spaced_numbers[0])
-                            if len(clean_number) == 10 and clean_number.startswith('88'):
-                                print(f"Found spaced delivery number on page {page_num + 1}: {clean_number}")
-                                return clean_number
-                        
-                        # Try looking for the number as separate digits
-                        digit_pattern = re.findall(r'8[\s]*8[\s]*\d[\s]*\d[\s]*\d[\s]*\d[\s]*\d[\s]*\d[\s]*\d[\s]*\d', text)
-                        if digit_pattern:
-                            clean_number = re.sub(r'\s', '', digit_pattern[0])
-                            if len(clean_number) == 10:
-                                print(f"Found digit-separated delivery number on page {page_num + 1}: {clean_number}")
-                                return clean_number
-                                
-                    else:
-                        print(f"No text extracted from page {page_num + 1}")
-                        
+                            return delivery_numbers[0]
+                            
                 except Exception as page_error:
                     print(f"Error processing page {page_num + 1}: {page_error}")
     
     except Exception as e:
-        print(f"Error reading PDF: {e}")
+        print(f"PyPDF2 fallback failed: {e}")
     
     return None
 
@@ -107,7 +175,7 @@ def find_pdf_files():
 def process_shipping_pdf(pdf_path, base_output_folder="./output"):
     """
     Main function to process the shipping PDF:
-    1. Extract delivery number
+    1. Extract delivery number using OCR
     2. Create folder named after delivery number
     3. Split PDF into individual pages
     """
@@ -116,15 +184,15 @@ def process_shipping_pdf(pdf_path, base_output_folder="./output"):
     
     print(f"Processing: {pdf_path.name}")
     
-    # Step 1: Extract delivery number
-    delivery_number = extract_delivery_number(pdf_path)
+    # Step 1: Extract delivery number using OCR
+    delivery_number = extract_delivery_number_ocr(pdf_path)
     
     if not delivery_number:
         print("ERROR: Could not find delivery number (10-digit starting with 88)")
-        print("This might be because:")
-        print("1. The PDF text is in image format (scanned)")
-        print("2. The number format is different than expected")
-        print("3. The text extraction isn't working properly")
+        print("Tried OCR and PyPDF2 methods with targeted search patterns:")
+        print("- DANGEROUS GOODS NOTE -> Exporter's reference")
+        print("- PACKING LIST -> Order:")
+        print("- Generic 88xxxxxxxx pattern search")
         return False
     
     print(f"Found delivery number: {delivery_number}")
@@ -147,7 +215,7 @@ def process_shipping_pdf(pdf_path, base_output_folder="./output"):
 
 # Main execution for GitHub Actions
 if __name__ == "__main__":
-    print("=== PDF Splitter Starting ===")
+    print("=== PDF Splitter with OCR Starting ===")
     
     # Find all PDF files in the repository
     pdf_files = find_pdf_files()
