@@ -47,7 +47,7 @@ def identify_document_type(page_text, delivery_number):
 
 def extract_delivery_number_ocr(pdf_path):
     """
-    Use OCR to extract text and find delivery number with 88-prefix priority
+    Use OCR to extract text and find delivery number with enhanced debugging
     """
     try:
         # Try importing OCR libraries
@@ -69,13 +69,31 @@ def extract_delivery_number_ocr(pdf_path):
             print(f"OCR extracted {len(text)} characters from page {page_num + 1}")
             
             if text:
-                # Show sample of extracted text for debugging
-                print(f"Sample text (first 300 chars): {repr(text[:300])}")
+                # Enhanced debugging - show more text
+                print(f"Sample text (first 500 chars): {repr(text[:500])}")
+                print(f"Full text length: {len(text)}")
+
+                # Debug: Look specifically for 88 numbers in the text
+                if "88" in text:
+                    print("Found '88' somewhere in text")
+                    # Find all instances of 88 followed by digits
+                    debug_matches = re.findall(r'88\d+', text)
+                    print(f"All '88' + digits found: {debug_matches}")
+                    
+                    # Check for the specific number we expect
+                    if "883612546" in text:
+                        print("✓ Found exact number 883612546 in text!")
+                    else:
+                        print("✗ 883612546 not found in text")
+                else:
+                    print("No '88' found anywhere in text")
                 
                 # PRIORITY PATTERNS: 88-prefixed numbers checked FIRST
                 patterns_all = [
                     # PRIORITY: 88-prefixed numbers anywhere in document - CHECK FIRST!
                     r"\b(88\d{8})\b",                   # 883612546 anywhere in text
+                    r"88(\d{8})",                       # 88 followed by 8 digits (more flexible)
+                    r"(88\d{8})",                       # 88 + 8 digits without word boundaries
                     
                     # Then check specific fields
                     r"Customer\s+Ref[:\s]*(\d{10})",     # Customer Ref: 883612546
@@ -111,9 +129,24 @@ def extract_delivery_number_ocr(pdf_path):
                             clean_match = re.sub(r'[^\d]', '', str(match))
                             print(f"Cleaned match: '{clean_match}' (length: {len(clean_match)})")
                             
-                            if len(clean_match) == 10:
+                            # Accept 10-digit numbers or 8-digit numbers with 88 prefix
+                            if (len(clean_match) == 10 and clean_match.startswith('88')) or \
+                               (len(clean_match) == 8 and i < 3):  # First 3 patterns are 88-specific
+                                if len(clean_match) == 8:
+                                    clean_match = "88" + clean_match  # Add the 88 prefix back
                                 print(f"✓ Found delivery number: {clean_match}")
                                 return clean_match
+                            elif len(clean_match) == 10 and i >= 3:  # Other 10-digit patterns
+                                print(f"Found non-88 number: {clean_match}, continuing to look for 88-prefix...")
+                                continue
+                
+                # If we get here, no 88-prefixed number was found, look for any 10-digit as fallback
+                print("No 88-prefixed number found, checking for any 10-digit numbers...")
+                fallback_matches = re.findall(r'\b(\d{10})\b', text)
+                if fallback_matches:
+                    clean_match = fallback_matches[0]
+                    print(f"✓ Using fallback delivery number: {clean_match}")
+                    return clean_match
                 
                 # Check if this is a specific page type for debugging
                 if "DANGEROUS GOODS NOTE" in text.upper():
