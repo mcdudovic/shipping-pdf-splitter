@@ -1,4 +1,4 @@
-name: PDF Splitter
+name: PDF Splitter with Network Drive Upload
 
 on:
   workflow_dispatch:
@@ -20,56 +20,17 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y tesseract-ocr poppler-utils
-        tesseract --version
-        echo "OCR dependencies installed successfully"
     
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt -v
-        echo "=== Checking installed packages ==="
-        pip list | grep -E "(pytesseract|pdf2image|Pillow|PyPDF2)"
-        echo "Python dependencies check completed"
+        pip install -r requirements.txt
     
-    - name: List files in repository before processing
-      run: |
-        echo "Files in repository:"
-        ls -la
-        echo "Looking for PDF files:"
-        find . -name "*.pdf" -type f
-    
-    - name: Run PDF splitter
+    - name: Run PDF splitter with SharePoint copy
       run: |
         python pdf_splitter.py
     
-    - name: Read delivery numbers for artifact naming
-      id: get_delivery_number
-      run: |
-        if [ -f "delivery_numbers.txt" ]; then
-          DELIVERY_NUMBER=$(head -n 1 delivery_numbers.txt)
-          echo "delivery_number=$DELIVERY_NUMBER" >> $GITHUB_OUTPUT
-          echo "Found delivery number: $DELIVERY_NUMBER"
-        else
-          echo "delivery_number=split-pdf-files" >> $GITHUB_OUTPUT
-          echo "No delivery number found, using default name"
-        fi
-    
-    - name: List output files
-      run: |
-        echo "Output folder contents:"
-        ls -la output/ || echo "No output folder found"
-        find . -name "*.pdf" -type f
-        echo "Files remaining in repository:"
-        ls -la *.pdf || echo "No PDF files remaining"
-    
-    - name: Upload split PDF files
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ steps.get_delivery_number.outputs.delivery_number }}
-        path: output/
-        if-no-files-found: warn
-    
-    - name: Commit deletion of processed files
+    - name: Commit cleanup of processed files
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
@@ -77,13 +38,6 @@ jobs:
         if git diff --staged --quiet; then
           echo "No files to commit"
         else
-          git commit -m "Auto-delete processed PDF files"
+          git commit -m "Auto-delete processed PDF files after SharePoint copy"
           git push
         fi
-    
-    - name: Cleanup repository (remove any remaining PDF files)
-      run: |
-        echo "Cleaning up any remaining PDF files..."
-        find . -name "*.pdf" -type f -not -path "./output/*" -delete || true
-        echo "Cleanup completed"
-        ls -la
