@@ -11,15 +11,15 @@ print("DEBUG: Libraries imported successfully")
 
 def is_valid_delivery_number(number_str):
     """
-    Strict validation: only accept 10-digit numbers starting with 88, 
-    or 11-digit numbers starting with 088
+    Strict validation: only accept 9-digit numbers starting with 88, 
+    or 10-digit numbers starting with 088
     """
     if not number_str or not number_str.isdigit():
         return False
     
-    if len(number_str) == 10 and number_str.startswith('88'):
+    if len(number_str) == 9 and number_str.startswith('88'):
         return True
-    elif len(number_str) == 11 and number_str.startswith('088'):
+    elif len(number_str) == 10 and number_str.startswith('088'):
         return True
     else:
         return False
@@ -34,9 +34,9 @@ def extract_delivery_number_from_packing_list(text):
     print("Searching in PACKING LIST...")
     
     patterns = [
-        r"Customer\s+Ref[:\s]*(\d{10,11})",     # Customer Ref: 883612546
-        r"Customer\s*Ref[:\s]*(\d{10,11})",     # Customer Ref:883612546
-        r"Order[:\s]*(\d{10,11})",              # Order: 4530323857
+        r"Customer\s+Ref[:\s]*(\d{9,10})",     # Customer Ref: 883612546
+        r"Customer\s*Ref[:\s]*(\d{9,10})",     # Customer Ref:883612546
+        r"Order[:\s]*(\d{9,10})",              # Order: 4530323857
     ]
     
     for pattern in patterns:
@@ -46,7 +46,7 @@ def extract_delivery_number_from_packing_list(text):
             print(f"Found in packing list: {clean_match}")
             if is_valid_delivery_number(clean_match):
                 # Convert 088xxxxxxx to 88xxxxxxx format
-                if len(clean_match) == 11 and clean_match.startswith('088'):
+                if len(clean_match) == 10 and clean_match.startswith('088'):
                     clean_match = clean_match[1:]  # Remove leading 0
                 print(f"✓ Valid delivery number from PACKING LIST: {clean_match}")
                 return clean_match
@@ -63,9 +63,9 @@ def extract_delivery_number_from_dgn(text):
     print("Searching in DANGEROUS GOODS NOTE...")
     
     patterns = [
-        r"Exporter['\s]*s\s*reference[:\s]*(\d{10,11})",  # Exporter's reference
-        r"Exporters?\s*reference[:\s]*(\d{10,11})",       # Exporters reference
-        r"reference[:\s]*(\d{10,11})",                    # reference: 883612546
+        r"Exporter['\s]*s\s*reference[:\s]*(\d{9,10})",  # Exporter's reference
+        r"Exporters?\s*reference[:\s]*(\d{9,10})",       # Exporters reference
+        r"reference[:\s]*(\d{9,10})",                    # reference: 883612546
     ]
     
     for pattern in patterns:
@@ -74,7 +74,7 @@ def extract_delivery_number_from_dgn(text):
             clean_match = re.sub(r'[^\d]', '', match)
             print(f"Found in DGN: {clean_match}")
             if is_valid_delivery_number(clean_match):
-                if len(clean_match) == 11 and clean_match.startswith('088'):
+                if len(clean_match) == 10 and clean_match.startswith('088'):
                     clean_match = clean_match[1:]
                 print(f"✓ Valid delivery number from DGN: {clean_match}")
                 return clean_match
@@ -91,10 +91,10 @@ def extract_delivery_number_from_cds(text):
     print("Searching in CDS EXPORT...")
     
     patterns = [
-        r"LRN[:\s]*(\d{10,11})",                # LRN box
-        r"0(\d{9})",                            # Numbers with leading 0
-        r"\b(088\d{8})\b",                      # 088xxxxxxxx
-        r"\b(88\d{8})\b",                       # 88xxxxxxxx
+        r"LRN[:\s]*(\d{9,10})",                # LRN box
+        r"0(\d{8})",                            # Numbers with leading 0 (9 digits total)
+        r"\b(088\d{7})\b",                      # 088xxxxxxx (10 digits)
+        r"\b(88\d{7})\b",                       # 88xxxxxxx (9 digits)
     ]
     
     for pattern in patterns:
@@ -103,7 +103,7 @@ def extract_delivery_number_from_cds(text):
             clean_match = re.sub(r'[^\d]', '', match)
             print(f"Found in CDS: {clean_match}")
             if is_valid_delivery_number(clean_match):
-                if len(clean_match) == 11 and clean_match.startswith('088'):
+                if len(clean_match) == 10 and clean_match.startswith('088'):
                     clean_match = clean_match[1:]
                 print(f"✓ Valid delivery number from CDS: {clean_match}")
                 return clean_match
@@ -122,10 +122,10 @@ def extract_delivery_number_from_ead(text):
     print("Searching in EAD/EXPORT DOCUMENT...")
     
     patterns = [
-        r"Reference\s+number[:\s]*[^\d]*(\d{10,11})",     # Reference numbers box
-        r"0(\d{9})",                                      # Numbers with leading 0
-        r"\b(088\d{8})\b",                               # 088xxxxxxxx
-        r"\b(88\d{8})\b",                                # 88xxxxxxxx
+        r"Reference\s+number[:\s]*[^\d]*(\d{9,10})",     # Reference numbers box
+        r"0(\d{8})",                                      # Numbers with leading 0
+        r"\b(088\d{7})\b",                               # 088xxxxxxx
+        r"\b(88\d{7})\b",                                # 88xxxxxxx
     ]
     
     for pattern in patterns:
@@ -134,7 +134,7 @@ def extract_delivery_number_from_ead(text):
             clean_match = re.sub(r'[^\d]', '', match)
             print(f"Found in EAD: {clean_match}")
             if is_valid_delivery_number(clean_match):
-                if len(clean_match) == 11 and clean_match.startswith('088'):
+                if len(clean_match) == 10 and clean_match.startswith('088'):
                     clean_match = clean_match[1:]
                 print(f"✓ Valid delivery number from EAD: {clean_match}")
                 return clean_match
@@ -151,10 +151,10 @@ def extract_delivery_number_from_sad(text):
     print("Searching in SAD SHEET...")
     
     patterns = [
-        r"Reference\s+number[:\s]*[^\d]*(\d{10,11})",     # Reference numbers box
-        r"0(\d{9})",                                      # Numbers with leading 0  
-        r"\b(088\d{8})\b",                               # 088xxxxxxxx
-        r"\b(88\d{8})\b",                                # 88xxxxxxxx
+        r"Reference\s+number[:\s]*[^\d]*(\d{9,10})",     # Reference numbers box
+        r"0(\d{8})",                                      # Numbers with leading 0  
+        r"\b(088\d{7})\b",                               # 088xxxxxxx
+        r"\b(88\d{7})\b",                                # 88xxxxxxx
     ]
     
     for pattern in patterns:
@@ -163,7 +163,7 @@ def extract_delivery_number_from_sad(text):
             clean_match = re.sub(r'[^\d]', '', match)
             print(f"Found in SAD: {clean_match}")
             if is_valid_delivery_number(clean_match):
-                if len(clean_match) == 11 and clean_match.startswith('088'):
+                if len(clean_match) == 10 and clean_match.startswith('088'):
                     clean_match = clean_match[1:]
                 print(f"✓ Valid delivery number from SAD: {clean_match}")
                 return clean_match
@@ -180,9 +180,9 @@ def extract_delivery_number_from_certificate(text):
     print("Searching in CERTIFICATE OF CLEANLINESS...")
     
     patterns = [
-        r"CUSTOMER\s+LOAD(?:ING)?\s+REF[:\s]*(\d{10,11})", # CUSTOMER LOAD REF: or CUSTOMER LOADING REF:
-        r"LOAD\s+REF[:\s]*(\d{10,11})",                    # LOAD REF:
-        r"\b(88\d{8})\b",                                  # 88xxxxxxxx anywhere
+        r"CUSTOMER\s+LOAD(?:ING)?\s+REF[:\s]*(\d{9,10})", # CUSTOMER LOAD REF: or CUSTOMER LOADING REF:
+        r"LOAD\s+REF[:\s]*(\d{9,10})",                    # LOAD REF:
+        r"\b(88\d{7})\b",                                  # 88xxxxxxx anywhere
     ]
     
     for pattern in patterns:
@@ -191,7 +191,7 @@ def extract_delivery_number_from_certificate(text):
             clean_match = re.sub(r'[^\d]', '', match)
             print(f"Found in Certificate: {clean_match}")
             if is_valid_delivery_number(clean_match):
-                if len(clean_match) == 11 and clean_match.startswith('088'):
+                if len(clean_match) == 10 and clean_match.startswith('088'):
                     clean_match = clean_match[1:]
                 print(f"✓ Valid delivery number from Certificate: {clean_match}")
                 return clean_match
@@ -414,8 +414,8 @@ def process_shipping_pdf(pdf_path, base_output_folder="./output"):
     if not delivery_number:
         print("ERROR: Could not find valid delivery number")
         print("STRICT VALIDATION FAILED:")
-        print("- Must be exactly 10 digits starting with '88'")
-        print("- Or exactly 11 digits starting with '088'")
+        print("- Must be exactly 9 digits starting with '88'")
+        print("- Or exactly 10 digits starting with '088'")
         print("- Searched in priority order:")
         print("  1. Packing List (Order/Customer Ref)")
         print("  2. DGN (Exporter's reference)")
