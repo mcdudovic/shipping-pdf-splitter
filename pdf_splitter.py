@@ -6,8 +6,14 @@ import re
 import os
 from pathlib import Path
 import glob
+import zipfile
+import shutil
+from datetime import datetime
 
 print("DEBUG: Libraries imported successfully")
+
+# SharePoint network path
+SHAREPOINT_PATH = Path(r"C:\Users\sttaylor\Bacardi-Martini, Inc\GlasgowFS - Split PDFs")
 
 def is_valid_delivery_number(number_str):
     """
@@ -22,6 +28,115 @@ def is_valid_delivery_number(number_str):
     elif len(number_str) == 10 and number_str.startswith('088'):
         return True
     else:
+        return False
+
+def extract_filling_date(text):
+    """
+    Extract filling date from packing list
+    """
+    if "PACKING LIST" not in text.upper() and "FILLING DATE" not in text.upper():
+        return None
+    
+    print("Searching for FILLING DATE...")
+    
+    # Look for FILLING DATE followed by a date
+    patterns = [
+        r"FILLING\s+DATE[:\s]*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})",    # DD/MM/YYYY or DD-MM-YYYY
+        r"FILLING\s+DATE[:\s]*(\d{1,2}[/.-]\d{1,2}[/.-]\d{2})",     # DD/MM/YY or DD-MM-YY
+        r"FILLING[:\s]+DATE[:\s]*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})",  # FILLING: DATE
+        r"FILLING[:\s]+DATE[:\s]*(\d{1,2}[/.-]\d{1,2}[/.-]\d{2})",   # FILLING: DATE YY
+    ]
+    
+    for pattern in patterns:
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        if matches:
+            date_str = matches[0]
+            print(f"Found filling date: {date_str}")
+            
+            # Convert to DD.MM.YY format
+            try:
+                # Handle different separators and year formats
+                date_clean = re.sub(r'[/.-]', '/', date_str)
+                parts = date_clean.split('/')
+                
+                if len(parts) == 3:
+                    day, month, year = parts
+                    
+                    # Convert year to YY format
+                    if len(year) == 4:
+                        year = year[-2:]  # Take last 2 digits
+                    
+                    # Format as DD.MM.YY
+                    formatted_date = f"{day.zfill(2)}.{month.zfill(2)}.{year}"
+                    print(f"Formatted filling date: {formatted_date}")
+                    return formatted_date
+                    
+            except Exception as e:
+                print(f"Error formatting date: {e}")
+                continue
+    
+    print("No filling date found")
+    return None
+
+def create_zip_file(delivery_number, output_folder):
+    """
+    Create a ZIP file of all split PDFs
+    """
+    zip_filename = f"{delivery_number}.zip"
+    zip_path = Path(zip_filename)
+    
+    print(f"Creating ZIP file: {zip_filename}")
+    
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for pdf_file in output_folder.glob("*.pdf"):
+            zipf.write(pdf_file, pdf_file.name)
+            print(f"Added to ZIP: {pdf_file.name}")
+    
+    print(f"✓ ZIP file created: {zip_path}")
+    return zip_path
+
+def copy_to_sharepoint(zip_path, filling_date, delivery_number):
+    """
+    Copy ZIP file to SharePoint network drive in date-organized folder
+    """
+    try:
+        # Check if SharePoint path is accessible
+        if not SHAREPOINT_PATH.exists():
+            print(f"ERROR: SharePoint path not accessible: {SHAREPOINT_PATH}")
+            print("Make sure you're logged into the company network and have access to the folder")
+            return False
+        
+        print(f"✓ SharePoint path accessible: {SHAREPOINT_PATH}")
+        
+        # Create date folder path
+        date_folder = SHAREPOINT_PATH / filling_date
+        
+        # Check if date folder exists, create if not
+        if not date_folder.exists():
+            print(f"Creating date folder: {filling_date}")
+            date_folder.mkdir(parents=True, exist_ok=True)
+            print(f"✓ Created date folder: {date_folder}")
+        else:
+            print(f"✓ Date folder already exists: {date_folder}")
+        
+        # Copy ZIP file to date folder
+        destination_path = date_folder / zip_path.name
+        
+        print(f"Copying {zip_path.name} to SharePoint...")
+        shutil.copy2(zip_path, destination_path)
+        
+        print(f"✓ Successfully copied to SharePoint:")
+        print(f"  Location: {destination_path}")
+        print(f"  Size: {destination_path.stat().st_size:,} bytes")
+        
+        return True
+        
+    except PermissionError as e:
+        print(f"ERROR: Permission denied accessing SharePoint folder: {e}")
+        print("Make sure you have write permissions to the SharePoint folder")
+        return False
+    except Exception as e:
+        print(f"ERROR: Failed to copy to SharePoint: {e}")
         return False
 
 def extract_delivery_number_from_packing_list(text):
@@ -203,7 +318,6 @@ def extract_delivery_number_hierarchical(text):
     Search for delivery number using hierarchical approach
     """
     print(f"\n=== HIERARCHICAL DELIVERY NUMBER SEARCH ===")
-    print(f"Text sample (first 300 chars): {repr(text[:300])}")
     
     # Priority 1: Packing List
     result = extract_delivery_number_from_packing_list(text)
@@ -235,7 +349,6 @@ def extract_delivery_number_hierarchical(text):
     if result:
         return result
     
-    print("No valid delivery number found in this page")
     return None
 
 def identify_document_type(page_text, delivery_number):
@@ -274,7 +387,7 @@ def identify_document_type(page_text, delivery_number):
 
 def extract_delivery_number_ocr(pdf_path):
     """
-    Use OCR to extract delivery number using hierarchical search
+    Use OCR to extract delivery number and filling date using hierarchical search
     """
     try:
         import pytesseract
@@ -286,19 +399,31 @@ def extract_delivery_number_ocr(pdf_path):
         images = pdf2image.convert_from_path(pdf_path)
         print(f"Converted {len(images)} pages to images")
         
+        delivery_number = None
+        filling_date = None
+        
         for page_num, image in enumerate(images):
             print(f"\n--- OCR Processing Page {page_num + 1} ---")
             
             text = pytesseract.image_to_string(image)
             print(f"OCR extracted {len(text)} characters from page {page_num + 1}")
             
-            if text and len(text) > 100:  # Only process substantial text
-                # Use hierarchical search
-                delivery_number = extract_delivery_number_hierarchical(text)
-                if delivery_number:
-                    return delivery_number
+            if text and len(text) > 100:
+                # Extract delivery number if not found yet
+                if not delivery_number:
+                    delivery_number = extract_delivery_number_hierarchical(text)
+                
+                # Extract filling date if not found yet
+                if not filling_date:
+                    filling_date = extract_filling_date(text)
+                
+                # Stop if we have both
+                if delivery_number and filling_date:
+                    break
             else:
                 print(f"Insufficient text extracted from page {page_num + 1}")
+        
+        return delivery_number, filling_date
         
     except ImportError as e:
         print(f"OCR libraries not available: {e}")
@@ -306,9 +431,6 @@ def extract_delivery_number_ocr(pdf_path):
     except Exception as e:
         print(f"OCR failed with error: {e}")
         return extract_delivery_number_fallback(pdf_path)
-    
-    print("No valid delivery number found with OCR method")
-    return None
 
 def extract_delivery_number_fallback(pdf_path):
     """
@@ -318,22 +440,32 @@ def extract_delivery_number_fallback(pdf_path):
         with open(pdf_path, 'rb') as file:
             pdf_reader = PyPDF2.PdfReader(file)
             
+            delivery_number = None
+            filling_date = None
+            
             for page_num, page in enumerate(pdf_reader.pages):
                 try:
                     text = page.extract_text()
                     if text and len(text) > 100:
                         print(f"PyPDF2 extracted {len(text)} characters from page {page_num + 1}")
-                        delivery_number = extract_delivery_number_hierarchical(text)
-                        if delivery_number:
-                            return delivery_number
+                        
+                        if not delivery_number:
+                            delivery_number = extract_delivery_number_hierarchical(text)
+                        
+                        if not filling_date:
+                            filling_date = extract_filling_date(text)
+                        
+                        if delivery_number and filling_date:
+                            break
                             
                 except Exception as page_error:
                     print(f"Error processing page {page_num + 1}: {page_error}")
+                    
+            return delivery_number, filling_date
     
     except Exception as e:
         print(f"PyPDF2 fallback failed: {e}")
-    
-    return None
+        return None, None
 
 def split_pdf_to_pages(pdf_path, output_folder, delivery_number):
     """
@@ -401,31 +533,26 @@ def find_pdf_files():
 
 def process_shipping_pdf(pdf_path, base_output_folder="./output"):
     """
-    Main function to process shipping PDF with strict validation
+    Main function to process shipping PDF with SharePoint network drive integration
     """
     pdf_path = Path(pdf_path)
     base_output_folder = Path(base_output_folder)
     
     print(f"Processing: {pdf_path.name}")
     
-    # Extract delivery number using hierarchical search
-    delivery_number = extract_delivery_number_ocr(pdf_path)
+    # Extract delivery number and filling date
+    delivery_number, filling_date = extract_delivery_number_ocr(pdf_path)
     
     if not delivery_number:
         print("ERROR: Could not find valid delivery number")
-        print("STRICT VALIDATION FAILED:")
-        print("- Must be exactly 9 digits starting with '88'")
-        print("- Or exactly 10 digits starting with '088'")
-        print("- Searched in priority order:")
-        print("  1. Packing List (Order/Customer Ref)")
-        print("  2. DGN (Exporter's reference)")
-        print("  3. CDS Export (box 40/LRN)")
-        print("  4. EAD (Reference Numbers)")
-        print("  5. SAD (Reference Numbers/box 40)")
-        print("  6. Certificate (Customer Load Ref)")
         return False, None
     
+    if not filling_date:
+        print("WARNING: Could not find filling date, using current date")
+        filling_date = datetime.now().strftime("%d.%m.%y")
+    
     print(f"✓ VALIDATED delivery number: {delivery_number}")
+    print(f"✓ EXTRACTED filling date: {filling_date}")
     
     # Create output folder
     delivery_folder = base_output_folder / delivery_number
@@ -437,23 +564,43 @@ def process_shipping_pdf(pdf_path, base_output_folder="./output"):
     
     if page_files:
         print(f"\nSUCCESS: Created {len(page_files)} individual PDF files")
-        print(f"Location: {delivery_folder}")
         
-        # Delete original PDF
-        try:
-            pdf_path.unlink()
-            print(f"✓ Deleted original file: {pdf_path.name}")
-        except Exception as e:
-            print(f"Warning: Could not delete original file: {e}")
+        # Create ZIP file
+        zip_path = create_zip_file(delivery_number, delivery_folder)
         
-        return True, delivery_number
+        # Copy to SharePoint
+        copy_success = copy_to_sharepoint(zip_path, filling_date, delivery_number)
+        
+        if copy_success:
+            # Clean up local files
+            print("Cleaning up local files...")
+            try:
+                # Delete ZIP file
+                zip_path.unlink()
+                print(f"✓ Deleted local ZIP: {zip_path}")
+                
+                # Delete output folder and contents
+                for file in delivery_folder.glob("*"):
+                    file.unlink()
+                delivery_folder.rmdir()
+                print(f"✓ Deleted output folder: {delivery_folder}")
+                
+                # Delete original PDF
+                pdf_path.unlink()
+                print(f"✓ Deleted original file: {pdf_path.name}")
+                
+            except Exception as e:
+                print(f"Warning: Cleanup error: {e}")
+        
+        return copy_success, delivery_number
     else:
         print("ERROR: Failed to split PDF")
         return False, None
 
 # Main execution
 if __name__ == "__main__":
-    print("=== HIERARCHICAL PDF SPLITTER STARTING ===")
+    print("=== SHAREPOINT NETWORK DRIVE PDF SPLITTER STARTING ===")
+    print(f"SharePoint target path: {SHAREPOINT_PATH}")
     
     pdf_files = find_pdf_files()
     
@@ -477,6 +624,5 @@ if __name__ == "__main__":
     print(f"COMPLETED: Successfully processed {success_count}/{len(pdf_files)} PDF files")
     
     if processed_delivery_numbers:
-        with open('delivery_numbers.txt', 'w') as f:
-            f.write('\n'.join(processed_delivery_numbers))
-        print(f"Delivery numbers written to file: {processed_delivery_numbers}")
+        print(f"Processed delivery numbers: {processed_delivery_numbers}")
+        print(f"Files copied to SharePoint: {SHAREPOINT_PATH}")
