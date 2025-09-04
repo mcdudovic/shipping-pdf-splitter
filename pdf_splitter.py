@@ -47,7 +47,7 @@ def identify_document_type(page_text, delivery_number):
 
 def extract_delivery_number_ocr(pdf_path):
     """
-    Use OCR to extract text and find delivery number with flexible patterns
+    Use OCR to extract text and find delivery number with 88-prefix priority
     """
     try:
         # Try importing OCR libraries
@@ -72,9 +72,12 @@ def extract_delivery_number_ocr(pdf_path):
                 # Show sample of extracted text for debugging
                 print(f"Sample text (first 300 chars): {repr(text[:300])}")
                 
-                # Try multiple patterns to find the delivery number - FLEXIBLE PATTERNS
+                # PRIORITY PATTERNS: 88-prefixed numbers checked FIRST
                 patterns_all = [
-                    # Packing List patterns - Customer Ref is now primary
+                    # PRIORITY: 88-prefixed numbers anywhere in document - CHECK FIRST!
+                    r"\b(88\d{8})\b",                   # 883612546 anywhere in text
+                    
+                    # Then check specific fields
                     r"Customer\s+Ref[:\s]*(\d{10})",     # Customer Ref: 883612546
                     r"Customer\s*Ref[:\s]*(\d{10})",     # Customer Ref:883612546 
                     r"Customer\s+Reference[:\s]*(\d{10})", # Customer Reference: 
@@ -93,15 +96,11 @@ def extract_delivery_number_ocr(pdf_path):
                     r"ID[:\s]*(\d{10})",                # ID: 883612546
                     r"Booking[:\s]*(\d{10})",           # Booking: 883612546
                     
-                    # Very flexible - any 10-digit number starting with 88
-                    r"\b(88\d{8})\b",                   # 883612546 anywhere in text
-                    
-                    # Backup - any 10-digit number  
+                    # Backup - any 10-digit number (lowest priority)
                     r"\b(\d{10})\b",                    # Any 10-digit number
                 ]
                 
-                print("Trying flexible delivery number patterns...")
-                found_candidates = []
+                print("Trying delivery number patterns (88-prefix priority)...")
                 
                 for i, pattern in enumerate(patterns_all):
                     matches = re.findall(pattern, text, re.IGNORECASE)
@@ -113,19 +112,8 @@ def extract_delivery_number_ocr(pdf_path):
                             print(f"Cleaned match: '{clean_match}' (length: {len(clean_match)})")
                             
                             if len(clean_match) == 10:
-                                found_candidates.append((clean_match, i, pattern))
-                
-                # Process candidates - prefer 88-prefix numbers
-                for clean_match, pattern_index, pattern in found_candidates:
-                    if clean_match.startswith('88'):
-                        print(f"✓ Found delivery number (88-prefix): {clean_match}")
-                        return clean_match
-                
-                # If no 88-prefix found, take the first 10-digit number
-                if found_candidates:
-                    clean_match = found_candidates[0][0]
-                    print(f"✓ Found delivery number (fallback): {clean_match}")
-                    return clean_match
+                                print(f"✓ Found delivery number: {clean_match}")
+                                return clean_match
                 
                 # Check if this is a specific page type for debugging
                 if "DANGEROUS GOODS NOTE" in text.upper():
@@ -161,13 +149,13 @@ def extract_delivery_number_fallback(pdf_path):
                     if text and len(text) > 50:
                         print(f"PyPDF2 extracted {len(text)} characters from page {page_num + 1}")
                         
-                        # Use same flexible patterns as OCR method
+                        # Use same priority patterns as OCR method
                         patterns = [
+                            r"\b(88\d{8})\b",               # 88-prefix first
                             r"Customer\s+Ref[:\s]*(\d{10})",
                             r"Order[:\s]*(\d{10})",
                             r"reference[:\s]*(\d{10})",
-                            r"\b(88\d{8})\b",
-                            r"\b(\d{10})\b",
+                            r"\b(\d{10})\b",                # Any 10-digit last
                         ]
                         
                         for pattern in patterns:
@@ -270,12 +258,12 @@ def process_shipping_pdf(pdf_path, base_output_folder="./output"):
     
     if not delivery_number:
         print("ERROR: Could not find delivery number")
-        print("Tried flexible patterns including:")
-        print("- Customer Ref: [number]")
-        print("- Order: [number]") 
-        print("- Exporter's reference: [number]")
-        print("- Any 10-digit number starting with 88")
-        print("- Any 10-digit number anywhere in text")
+        print("Tried patterns in priority order:")
+        print("1. Any 10-digit number starting with 88 (priority)")
+        print("2. Customer Ref: [number]")
+        print("3. Order: [number]") 
+        print("4. Exporter's reference: [number]")
+        print("5. Any 10-digit number (fallback)")
         return False, None
     
     print(f"Found delivery number: {delivery_number}")
