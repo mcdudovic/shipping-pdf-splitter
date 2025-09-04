@@ -9,14 +9,241 @@ import glob
 
 print("DEBUG: Libraries imported successfully")
 
+def is_valid_delivery_number(number_str):
+    """
+    Strict validation: only accept 10-digit numbers starting with 88, 
+    or 11-digit numbers starting with 088
+    """
+    if not number_str or not number_str.isdigit():
+        return False
+    
+    if len(number_str) == 10 and number_str.startswith('88'):
+        return True
+    elif len(number_str) == 11 and number_str.startswith('088'):
+        return True
+    else:
+        return False
+
+def extract_delivery_number_from_packing_list(text):
+    """
+    Priority 1: Extract from Packing List - Order: or Customer Ref:
+    """
+    if "PACKING LIST" not in text.upper():
+        return None
+    
+    print("Searching in PACKING LIST...")
+    
+    patterns = [
+        r"Customer\s+Ref[:\s]*(\d{10,11})",     # Customer Ref: 883612546
+        r"Customer\s*Ref[:\s]*(\d{10,11})",     # Customer Ref:883612546
+        r"Order[:\s]*(\d{10,11})",              # Order: 4530323857
+    ]
+    
+    for pattern in patterns:
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        for match in matches:
+            clean_match = re.sub(r'[^\d]', '', match)
+            print(f"Found in packing list: {clean_match}")
+            if is_valid_delivery_number(clean_match):
+                # Convert 088xxxxxxx to 88xxxxxxx format
+                if len(clean_match) == 11 and clean_match.startswith('088'):
+                    clean_match = clean_match[1:]  # Remove leading 0
+                print(f"✓ Valid delivery number from PACKING LIST: {clean_match}")
+                return clean_match
+    
+    return None
+
+def extract_delivery_number_from_dgn(text):
+    """
+    Priority 2: Extract from DGN - Exporter's reference box 4
+    """
+    if "DANGEROUS GOODS" not in text.upper():
+        return None
+    
+    print("Searching in DANGEROUS GOODS NOTE...")
+    
+    patterns = [
+        r"Exporter['\s]*s\s*reference[:\s]*(\d{10,11})",  # Exporter's reference
+        r"Exporters?\s*reference[:\s]*(\d{10,11})",       # Exporters reference
+        r"reference[:\s]*(\d{10,11})",                    # reference: 883612546
+    ]
+    
+    for pattern in patterns:
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        for match in matches:
+            clean_match = re.sub(r'[^\d]', '', match)
+            print(f"Found in DGN: {clean_match}")
+            if is_valid_delivery_number(clean_match):
+                if len(clean_match) == 11 and clean_match.startswith('088'):
+                    clean_match = clean_match[1:]
+                print(f"✓ Valid delivery number from DGN: {clean_match}")
+                return clean_match
+    
+    return None
+
+def extract_delivery_number_from_cds(text):
+    """
+    Priority 3: Extract from CDS Export - box 40 or LRN box
+    """
+    if "CDS" not in text.upper() and "EXPORT" not in text.upper():
+        return None
+    
+    print("Searching in CDS EXPORT...")
+    
+    patterns = [
+        r"LRN[:\s]*(\d{10,11})",                # LRN box
+        r"0(\d{9})",                            # Numbers with leading 0
+        r"\b(088\d{8})\b",                      # 088xxxxxxxx
+        r"\b(88\d{8})\b",                       # 88xxxxxxxx
+    ]
+    
+    for pattern in patterns:
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        for match in matches:
+            clean_match = re.sub(r'[^\d]', '', match)
+            print(f"Found in CDS: {clean_match}")
+            if is_valid_delivery_number(clean_match):
+                if len(clean_match) == 11 and clean_match.startswith('088'):
+                    clean_match = clean_match[1:]
+                print(f"✓ Valid delivery number from CDS: {clean_match}")
+                return clean_match
+    
+    return None
+
+def extract_delivery_number_from_ead(text):
+    """
+    Priority 4: Extract from Export Accompanying Document (EAD)
+    """
+    if "EXPORT" not in text.upper() and "ACCOMPANYING" not in text.upper():
+        # Also check for EUROPEAN COMMUNITY
+        if "EUROPEAN COMMUNITY" not in text.upper():
+            return None
+    
+    print("Searching in EAD/EXPORT DOCUMENT...")
+    
+    patterns = [
+        r"Reference\s+number[:\s]*[^\d]*(\d{10,11})",     # Reference numbers box
+        r"0(\d{9})",                                      # Numbers with leading 0
+        r"\b(088\d{8})\b",                               # 088xxxxxxxx
+        r"\b(88\d{8})\b",                                # 88xxxxxxxx
+    ]
+    
+    for pattern in patterns:
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        for match in matches:
+            clean_match = re.sub(r'[^\d]', '', match)
+            print(f"Found in EAD: {clean_match}")
+            if is_valid_delivery_number(clean_match):
+                if len(clean_match) == 11 and clean_match.startswith('088'):
+                    clean_match = clean_match[1:]
+                print(f"✓ Valid delivery number from EAD: {clean_match}")
+                return clean_match
+    
+    return None
+
+def extract_delivery_number_from_sad(text):
+    """
+    Priority 5: Extract from SAD sheet
+    """
+    if "UNITED KINGDOM" not in text.upper() and "EXP-SAD" not in text.upper():
+        return None
+    
+    print("Searching in SAD SHEET...")
+    
+    patterns = [
+        r"Reference\s+number[:\s]*[^\d]*(\d{10,11})",     # Reference numbers box
+        r"0(\d{9})",                                      # Numbers with leading 0  
+        r"\b(088\d{8})\b",                               # 088xxxxxxxx
+        r"\b(88\d{8})\b",                                # 88xxxxxxxx
+    ]
+    
+    for pattern in patterns:
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        for match in matches:
+            clean_match = re.sub(r'[^\d]', '', match)
+            print(f"Found in SAD: {clean_match}")
+            if is_valid_delivery_number(clean_match):
+                if len(clean_match) == 11 and clean_match.startswith('088'):
+                    clean_match = clean_match[1:]
+                print(f"✓ Valid delivery number from SAD: {clean_match}")
+                return clean_match
+    
+    return None
+
+def extract_delivery_number_from_certificate(text):
+    """
+    Priority 6: Extract from ISOCON/Certificate of Cleanliness
+    """
+    if "CERTIFICATE" not in text.upper() and "CLEANLINESS" not in text.upper() and "ISOCON" not in text.upper():
+        return None
+    
+    print("Searching in CERTIFICATE OF CLEANLINESS...")
+    
+    patterns = [
+        r"CUSTOMER\s+LOAD(?:ING)?\s+REF[:\s]*(\d{10,11})", # CUSTOMER LOAD REF: or CUSTOMER LOADING REF:
+        r"LOAD\s+REF[:\s]*(\d{10,11})",                    # LOAD REF:
+        r"\b(88\d{8})\b",                                  # 88xxxxxxxx anywhere
+    ]
+    
+    for pattern in patterns:
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        for match in matches:
+            clean_match = re.sub(r'[^\d]', '', match)
+            print(f"Found in Certificate: {clean_match}")
+            if is_valid_delivery_number(clean_match):
+                if len(clean_match) == 11 and clean_match.startswith('088'):
+                    clean_match = clean_match[1:]
+                print(f"✓ Valid delivery number from Certificate: {clean_match}")
+                return clean_match
+    
+    return None
+
+def extract_delivery_number_hierarchical(text):
+    """
+    Search for delivery number using hierarchical approach
+    """
+    print(f"\n=== HIERARCHICAL DELIVERY NUMBER SEARCH ===")
+    print(f"Text sample (first 300 chars): {repr(text[:300])}")
+    
+    # Priority 1: Packing List
+    result = extract_delivery_number_from_packing_list(text)
+    if result:
+        return result
+    
+    # Priority 2: DGN
+    result = extract_delivery_number_from_dgn(text)
+    if result:
+        return result
+    
+    # Priority 3: CDS Export
+    result = extract_delivery_number_from_cds(text)
+    if result:
+        return result
+    
+    # Priority 4: EAD
+    result = extract_delivery_number_from_ead(text)
+    if result:
+        return result
+    
+    # Priority 5: SAD
+    result = extract_delivery_number_from_sad(text)
+    if result:
+        return result
+    
+    # Priority 6: Certificate
+    result = extract_delivery_number_from_certificate(text)
+    if result:
+        return result
+    
+    print("No valid delivery number found in this page")
+    return None
+
 def identify_document_type(page_text, delivery_number):
     """
     Identify the type of document based on page content
-    Returns a descriptive filename
     """
     page_text_upper = page_text.upper()
     
-    # Document type patterns and their corresponding names
     doc_patterns = [
         ("DANGEROUS GOODS NOTE", f"{delivery_number} - DGN.pdf"),
         ("DANGEROUS GOODS DECLARATION", f"{delivery_number} - DGN.pdf"),
@@ -29,6 +256,8 @@ def identify_document_type(page_text, delivery_number):
         ("COLLECTION", f"{delivery_number} - Collection Note.pdf"),
         ("EFTCO CLEANING DOCUMENT", f"{delivery_number} - Tank Cleaning.pdf"),
         ("UK TANK CLEANING STATION", f"{delivery_number} - Tank Cleaning.pdf"),
+        ("CERTIFICATE OF CLEANLINESS", f"{delivery_number} - Certificate of Cleanliness.pdf"),
+        ("ISOCON", f"{delivery_number} - Certificate of Cleanliness.pdf"),
         ("CONTAINER INTERCHANGE", f"{delivery_number} - Container Receipt.pdf"),
         ("SPIRIT DRINKS VERIFICATION", f"{delivery_number} - SDV.pdf"),
         ("FACILITY DETAILS - SDVS", f"{delivery_number} - SDV.pdf"),
@@ -36,127 +265,40 @@ def identify_document_type(page_text, delivery_number):
         ("EXPORTS", f"{delivery_number} - Loading Sheet.pdf"),
     ]
     
-    # Check each pattern
     for pattern, filename in doc_patterns:
         if pattern in page_text_upper:
             print(f"Identified document type: {pattern} -> {filename}")
             return filename
     
-    # Fallback: generic naming
     return None
 
 def extract_delivery_number_ocr(pdf_path):
     """
-    Use OCR to extract text and find delivery number with enhanced debugging
+    Use OCR to extract delivery number using hierarchical search
     """
     try:
-        # Try importing OCR libraries
         import pytesseract
         import pdf2image
         from PIL import Image
         
-        print("Using OCR to extract text from scanned PDF...")
+        print("Using OCR with hierarchical search...")
         
-        # Convert PDF pages to images
         images = pdf2image.convert_from_path(pdf_path)
         print(f"Converted {len(images)} pages to images")
         
         for page_num, image in enumerate(images):
             print(f"\n--- OCR Processing Page {page_num + 1} ---")
             
-            # Extract text using OCR
             text = pytesseract.image_to_string(image)
             print(f"OCR extracted {len(text)} characters from page {page_num + 1}")
             
-            if text:
-                # Enhanced debugging - show more text
-                print(f"Sample text (first 500 chars): {repr(text[:500])}")
-                print(f"Full text length: {len(text)}")
-
-                # Debug: Look specifically for 88 numbers in the text
-                if "88" in text:
-                    print("Found '88' somewhere in text")
-                    # Find all instances of 88 followed by digits
-                    debug_matches = re.findall(r'88\d+', text)
-                    print(f"All '88' + digits found: {debug_matches}")
-                    
-                    # Check for the specific number we expect
-                    if "883612546" in text:
-                        print("✓ Found exact number 883612546 in text!")
-                    else:
-                        print("✗ 883612546 not found in text")
-                else:
-                    print("No '88' found anywhere in text")
-                
-                # PRIORITY PATTERNS: 88-prefixed numbers checked FIRST
-                patterns_all = [
-                    # PRIORITY: 88-prefixed numbers anywhere in document - CHECK FIRST!
-                    r"\b(88\d{8})\b",                   # 883612546 anywhere in text
-                    r"88(\d{8})",                       # 88 followed by 8 digits (more flexible)
-                    r"(88\d{8})",                       # 88 + 8 digits without word boundaries
-                    
-                    # Then check specific fields
-                    r"Customer\s+Ref[:\s]*(\d{10})",     # Customer Ref: 883612546
-                    r"Customer\s*Ref[:\s]*(\d{10})",     # Customer Ref:883612546 
-                    r"Customer\s+Reference[:\s]*(\d{10})", # Customer Reference: 
-                    r"Order[:\s]*(\d{10})",              # Order: (backup)
-                    r"Order[:\s]*(\d+)",                 # Order: followed by any digits
-                    
-                    # Dangerous Goods Note patterns  
-                    r"Exporter['\s]*s?\s*reference[:\s]*(\d{10})", # Exporter's reference
-                    r"Exporters?\s*reference[:\s]*(\d{10})",       # Exporters reference
-                    r"reference[:\s]*(\d{10})",          # reference: 883612546
-                    
-                    # Generic field patterns - look for common shipping fields
-                    r"Ref[:\s]*(\d{10})",               # Ref: 883612546
-                    r"Reference[:\s]*(\d{10})",         # Reference: 883612546  
-                    r"Number[:\s]*(\d{10})",            # Number: 883612546
-                    r"ID[:\s]*(\d{10})",                # ID: 883612546
-                    r"Booking[:\s]*(\d{10})",           # Booking: 883612546
-                    
-                    # Backup - any 10-digit number (lowest priority)
-                    r"\b(\d{10})\b",                    # Any 10-digit number
-                ]
-                
-                print("Trying delivery number patterns (88-prefix priority)...")
-                
-                for i, pattern in enumerate(patterns_all):
-                    matches = re.findall(pattern, text, re.IGNORECASE)
-                    if matches:
-                        print(f"Pattern {i+1} '{pattern}' found: {matches}")
-                        for match in matches:
-                            # Clean the match
-                            clean_match = re.sub(r'[^\d]', '', str(match))
-                            print(f"Cleaned match: '{clean_match}' (length: {len(clean_match)})")
-                            
-                            # Accept 10-digit numbers or 8-digit numbers with 88 prefix
-                            if (len(clean_match) == 10 and clean_match.startswith('88')) or \
-                               (len(clean_match) == 8 and i < 3):  # First 3 patterns are 88-specific
-                                if len(clean_match) == 8:
-                                    clean_match = "88" + clean_match  # Add the 88 prefix back
-                                print(f"✓ Found delivery number: {clean_match}")
-                                return clean_match
-                            elif len(clean_match) == 10 and i >= 3:  # Other 10-digit patterns
-                                print(f"Found non-88 number: {clean_match}, continuing to look for 88-prefix...")
-                                continue
-                
-                # If we get here, no 88-prefixed number was found, look for any 10-digit as fallback
-                print("No 88-prefixed number found, checking for any 10-digit numbers...")
-                fallback_matches = re.findall(r'\b(\d{10})\b', text)
-                if fallback_matches:
-                    clean_match = fallback_matches[0]
-                    print(f"✓ Using fallback delivery number: {clean_match}")
-                    return clean_match
-                
-                # Check if this is a specific page type for debugging
-                if "DANGEROUS GOODS NOTE" in text.upper():
-                    print("✓ Found DANGEROUS GOODS NOTE page")
-                
-                if "PACKING LIST" in text.upper():
-                    print("✓ Found PACKING LIST page")
-                    
+            if text and len(text) > 100:  # Only process substantial text
+                # Use hierarchical search
+                delivery_number = extract_delivery_number_hierarchical(text)
+                if delivery_number:
+                    return delivery_number
             else:
-                print(f"No text extracted from page {page_num + 1}")
+                print(f"Insufficient text extracted from page {page_num + 1}")
         
     except ImportError as e:
         print(f"OCR libraries not available: {e}")
@@ -165,12 +307,12 @@ def extract_delivery_number_ocr(pdf_path):
         print(f"OCR failed with error: {e}")
         return extract_delivery_number_fallback(pdf_path)
     
-    print("No delivery number found with OCR method")
+    print("No valid delivery number found with OCR method")
     return None
 
 def extract_delivery_number_fallback(pdf_path):
     """
-    Fallback method using PyPDF2 (for text-based PDFs)
+    Fallback method using PyPDF2 with hierarchical search
     """
     try:
         with open(pdf_path, 'rb') as file:
@@ -179,24 +321,11 @@ def extract_delivery_number_fallback(pdf_path):
             for page_num, page in enumerate(pdf_reader.pages):
                 try:
                     text = page.extract_text()
-                    if text and len(text) > 50:
+                    if text and len(text) > 100:
                         print(f"PyPDF2 extracted {len(text)} characters from page {page_num + 1}")
-                        
-                        # Use same priority patterns as OCR method
-                        patterns = [
-                            r"\b(88\d{8})\b",               # 88-prefix first
-                            r"Customer\s+Ref[:\s]*(\d{10})",
-                            r"Order[:\s]*(\d{10})",
-                            r"reference[:\s]*(\d{10})",
-                            r"\b(\d{10})\b",                # Any 10-digit last
-                        ]
-                        
-                        for pattern in patterns:
-                            matches = re.findall(pattern, text, re.IGNORECASE)
-                            for match in matches:
-                                clean_match = re.sub(r'[^\d]', '', str(match))
-                                if len(clean_match) == 10:
-                                    return clean_match
+                        delivery_number = extract_delivery_number_hierarchical(text)
+                        if delivery_number:
+                            return delivery_number
                             
                 except Exception as page_error:
                     print(f"Error processing page {page_num + 1}: {page_error}")
@@ -211,7 +340,6 @@ def split_pdf_to_pages(pdf_path, output_folder, delivery_number):
     Split PDF into individual pages with smart naming
     """
     try:
-        # For OCR text extraction per page
         import pytesseract
         import pdf2image
         
@@ -225,14 +353,12 @@ def split_pdf_to_pages(pdf_path, output_folder, delivery_number):
             print(f"Found {total_pages} pages in PDF")
             
             page_files = []
-            used_names = {}  # Track used names to avoid duplicates
+            used_names = {}
             
             for page_num in range(total_pages):
-                # Create a new PDF for this page
                 pdf_writer = PyPDF2.PdfWriter()
                 pdf_writer.add_page(pdf_reader.pages[page_num])
                 
-                # Extract text from this page using OCR to identify document type
                 try:
                     page_text = pytesseract.image_to_string(images[page_num])
                     suggested_filename = identify_document_type(page_text, delivery_number)
@@ -240,9 +366,7 @@ def split_pdf_to_pages(pdf_path, output_folder, delivery_number):
                     print(f"OCR failed for page {page_num + 1}: {ocr_error}")
                     suggested_filename = None
                 
-                # Determine final filename
                 if suggested_filename:
-                    # Handle duplicate names
                     base_name = suggested_filename
                     if base_name in used_names:
                         used_names[base_name] += 1
@@ -252,12 +376,10 @@ def split_pdf_to_pages(pdf_path, output_folder, delivery_number):
                         used_names[base_name] = 1
                         final_filename = base_name
                 else:
-                    # Fallback to generic naming
                     final_filename = f"{delivery_number} - Page {page_num + 1:02d}.pdf"
                 
                 page_path = output_folder / final_filename
                 
-                # Save the page
                 with open(page_path, 'wb') as output_file:
                     pdf_writer.write(output_file)
                 
@@ -279,41 +401,45 @@ def find_pdf_files():
 
 def process_shipping_pdf(pdf_path, base_output_folder="./output"):
     """
-    Main function to process the shipping PDF with smart naming
+    Main function to process shipping PDF with strict validation
     """
     pdf_path = Path(pdf_path)
     base_output_folder = Path(base_output_folder)
     
     print(f"Processing: {pdf_path.name}")
     
-    # Step 1: Extract delivery number
+    # Extract delivery number using hierarchical search
     delivery_number = extract_delivery_number_ocr(pdf_path)
     
     if not delivery_number:
-        print("ERROR: Could not find delivery number")
-        print("Tried patterns in priority order:")
-        print("1. Any 10-digit number starting with 88 (priority)")
-        print("2. Customer Ref: [number]")
-        print("3. Order: [number]") 
-        print("4. Exporter's reference: [number]")
-        print("5. Any 10-digit number (fallback)")
+        print("ERROR: Could not find valid delivery number")
+        print("STRICT VALIDATION FAILED:")
+        print("- Must be exactly 10 digits starting with '88'")
+        print("- Or exactly 11 digits starting with '088'")
+        print("- Searched in priority order:")
+        print("  1. Packing List (Order/Customer Ref)")
+        print("  2. DGN (Exporter's reference)")
+        print("  3. CDS Export (box 40/LRN)")
+        print("  4. EAD (Reference Numbers)")
+        print("  5. SAD (Reference Numbers/box 40)")
+        print("  6. Certificate (Customer Load Ref)")
         return False, None
     
-    print(f"Found delivery number: {delivery_number}")
+    print(f"✓ VALIDATED delivery number: {delivery_number}")
     
-    # Step 2: Create output folder
+    # Create output folder
     delivery_folder = base_output_folder / delivery_number
     delivery_folder.mkdir(parents=True, exist_ok=True)
     print(f"Created folder: {delivery_folder}")
     
-    # Step 3: Split PDF into pages with smart naming
+    # Split PDF into pages
     page_files = split_pdf_to_pages(pdf_path, delivery_folder, delivery_number)
     
     if page_files:
         print(f"\nSUCCESS: Created {len(page_files)} individual PDF files")
         print(f"Location: {delivery_folder}")
         
-        # Step 4: Delete original PDF file
+        # Delete original PDF
         try:
             pdf_path.unlink()
             print(f"✓ Deleted original file: {pdf_path.name}")
@@ -325,11 +451,10 @@ def process_shipping_pdf(pdf_path, base_output_folder="./output"):
         print("ERROR: Failed to split PDF")
         return False, None
 
-# Main execution for GitHub Actions
+# Main execution
 if __name__ == "__main__":
-    print("=== Enhanced PDF Splitter Starting ===")
+    print("=== HIERARCHICAL PDF SPLITTER STARTING ===")
     
-    # Find all PDF files in the repository
     pdf_files = find_pdf_files()
     
     if not pdf_files:
@@ -338,21 +463,19 @@ if __name__ == "__main__":
     
     print(f"Found {len(pdf_files)} PDF file(s): {pdf_files}")
     
-    # Process each PDF file
     success_count = 0
     processed_delivery_numbers = []
     
     for pdf_file in pdf_files:
-        print(f"\n{'='*50}")
+        print(f"\n{'='*60}")
         success, delivery_number = process_shipping_pdf(pdf_file)
         if success:
             success_count += 1
             processed_delivery_numbers.append(delivery_number)
     
-    print(f"\n{'='*50}")
+    print(f"\n{'='*60}")
     print(f"COMPLETED: Successfully processed {success_count}/{len(pdf_files)} PDF files")
     
-    # Write delivery numbers to file for workflow to use
     if processed_delivery_numbers:
         with open('delivery_numbers.txt', 'w') as f:
             f.write('\n'.join(processed_delivery_numbers))
