@@ -69,6 +69,18 @@ jobs:
         path: output/
         if-no-files-found: warn
     
+    - name: Commit deletion of processed files
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add -A
+        if git diff --staged --quiet; then
+          echo "No files to commit"
+        else
+          git commit -m "Auto-delete processed PDF files"
+          git push
+        fi
+    
     - name: Cleanup repository (remove any remaining PDF files)
       run: |
         echo "Cleaning up any remaining PDF files..."
